@@ -1,0 +1,82 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: sqyy-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: community_hospital
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-123456}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: sqyy-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      ELASTIC_PASSWORD: ${ES_PASSWORD:-changeme}
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "false"
+      "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u elastic:$$ELASTIC_PASSWORD http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=30s || exit 1"]
+      interval: 10s
+      timeout: 15s
+      retries: 15
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sqyy-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/community_hospital?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-app}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-123456}
+      APP_SEARCH_ENGINE: elasticsearch
+      APP_SEARCH_AUTO_SYNC_ON_STARTUP: "true"
+      APP_SEARCH_ELASTICSEARCH_ENABLED: "true"
+      APP_SEARCH_ELASTICSEARCH_URI: http://elasticsearch:9200
+      APP_SEARCH_ELASTICSEARCH_USERNAME: elastic
+      APP_SEARCH_ELASTICSEARCH_PASSWORD: ${ES_PASSWORD:-changeme}
+      APP_SEARCH_ELASTICSEARCH_CA_CERT_PATH: ""
+      APP_UPLOAD_DIR: /app/uploads
+    volumes:
+      - upload_data:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sqyy-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  mysql_data:
+  es_data:
+  upload_data:

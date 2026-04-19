@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: community-hospital-backend
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  datasource:
+    url: jdbc:mysql://localhost:3306/community_hospital_copy?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+server:
+  port: 8081
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  # 科室列表，可扩展。留空则使用默认：全科诊室、预防保健室、妇幼保健诊室
+  departments:
+    list: []
+  # 药房列表，可扩展。留空则使用默认：西药房、中药房
+  pharmacy:
+    list: []
+  # 前台列表，可扩展。留空则使用默认：一号前台、二号前台
+  reception:
+    list: []
+  upload:
+    # 头像存储目录，留空则使用 {用户目录}/.hospital-uploads/avatars
+    dir: ""
+  jwt:
+    secret: community-hospital-demo-secret-community-hospital-demo
+    expire-hours: 12
+  # Coze AI 配置（PAT 仅存后端，绝不暴露前端）
+  coze:
+    pat: ${COZE_PAT:pat_WAAybjNJNfE90LddVYZU1TJIHcBjZaLji334o01vkCKjLGHIbgl1n3hJxVhZWsaM}
+    ai-bot-id: ${COZE_AI_BOT_ID:7621086295833559059}
+    news-bot-id: ${COZE_NEWS_BOT_ID:7621119386388807689}
+    api-base-url: ${COZE_API_BASE_URL:https://api.coze.cn}
+  ai:
+    # 小米 MiMo 国内 API（OpenAI Chat Completions 兼容）：https://platform.xiaomimimo.com/#/docs/welcome
+    mimo:
+      api-key: ${MIMO_API_KEY:}
+      model: mimo-v2-flash
+      base-url: https://api.xiaomimimo.com/v1
+  search:
+    engine: elasticsearch
+    auto-sync-on-startup: true
+    elasticsearch:
+      enabled: true
+      index-prefix: community-hospital-copy
+      # 本地 ES：http 无需证书；https 需配置 ca-cert-path
+      uri: https://localhost:9200
+      username: elastic
+      password: VaNJumxuqhVo0fqQ+G02
+      ca-cert-path: F:/ES/elasticsearch-9.3.1/config/certs/http_ca.crt

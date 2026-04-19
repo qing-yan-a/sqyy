@@ -1,0 +1,6 @@
+ES 账号信息是：
+
+用户名：elastic
+密码：VaNJumxuqhVo0fqQ+G02
+启动：& "F:\ES\elasticsearch-9.3.1\bin\elasticsearch.bat"
+自检：curl.exe -k -u elastic:VaNJumxuqhVo0fqQ+G02 https://localhost:9200
