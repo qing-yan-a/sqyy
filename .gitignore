@@ -1,0 +1,29 @@
+# 测试文件
+test_*.py
+test_*.txt
+file_list_response.txt
+
+# 下载目录
+downloads/
+
+# 日志目录
+logs/
+
+# 同步历史
+sync_history.json
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 配置文件（包含敏感信息）
+# mimo_bridge_config.json
+
+# IDE
+.vscode/
+.idea/
+
+# 系统文件
+.DS_Store
+Thumbs.db

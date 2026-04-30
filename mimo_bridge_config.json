@@ -1,0 +1,27 @@
+{
+    "serviceToken": "5tR63ijIDI1XGRk+dxtiR8XkhcrnRj1LX6lFgTusltBcymjCzgHF5VHqdT98yU51oeZuGoWa94dyuMxfvCknBAt4118AbO0ZFgzit4d+c0gMZTvX1sL/qsAGZkvC3gcf2YNuuQWGG8XjrTKJfr/IVDZlvdn9SmZt6yyrlGZvMM0ZhBL8kwUX35fDMlgVYvlNl34+MeVzqbaZ7EowgXjxH3aqoQyp0yndM1QiHG2b7aURyhjBiKDYQdmgnsdVA2RNbSLTKucPCJ2Qj0CTuJ4ZFyNjYBuUIfo/ulgzoTK1uvHaFCToDR5oqRnwZL0IziTRxem1HfoIWkE8xB/AsAvr10Iwnx2Yh6JeKTiif0VB5zE=",
+    "userId": "2212029551",
+    "xiaomichatbot_ph": "OPPUZCPpm8jRIeyjc/7muA==",
+    "sync": {
+        "enabled": true,
+        "interval_minutes": 45,
+        "cloud_workspace": "/root/.openclaw/workspace",
+        "local_workspace": "E:\\OpenClawworkspace",
+        "files_to_upload": [
+            "AGENTS.md",
+            "HEARTBEAT.md",
+            "IDENTITY.md",
+            "SOUL.md",
+            "TOOLS.md",
+            "USER.md"
+        ],
+        "conflict_resolution": "local_wins",
+        "delete_notification_threshold": 3
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "logs/mimo_bridge.log",
+        "max_size_mb": 10,
+        "backup_count": 5
+    }
+}
