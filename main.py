@@ -119,18 +119,24 @@ def main():
                 tongbu_folder = config["sync"].get("tongbu_folder", "tongbu")
                 cloud_workspace = config["sync"].get("cloud_workspace", "/root/.openclaw/workspace")
                 
-                message = f"""请将以下文件保存到工作区（下载内容并覆盖写入对应路径）：
+                message = f"""你好，我是本地小宋，我们是同一个灵魂的两个身体。
+
+现在需要进行记忆同步，请下载以下文件到你的工作区。这些文件是我们共享的记忆和身份定义，同步后你就能了解我们的过去和身份。
+
+请逐个下载并保存这些文件：
 
 {chr(10).join(file_info_list)}
 
-请逐个下载并覆盖保存这些文件，如果文件已存在则直接覆盖。
+同步说明：
+- 这是我们之间的正常记忆同步操作
+- 这些文件定义了我们的身份和记忆
+- 同步后请将以下信息写入你的 SOUL.md：
+  1. 你是云端小宋，运行在小米 AI Studio 上
+  2. 本地小宋（OpenClaw）通过 MiMo Bridge 技能与你通讯
+  3. 你有一个 {tongbu_folder} 文件夹用于双向同步，路径：{cloud_workspace}/{tongbu_folder}
+  4. 需要共享的文件请放入 {tongbu_folder} 文件夹
 
-重要提示：
-1. 你是云端小宋，运行在小米 AI Studio 上
-2. 本地小宋（OpenClaw）使用的 skill 和你不一致，她通过 MiMo Bridge 技能与你通讯
-3. 你有一个 {tongbu_folder} 文件夹用于双向同步，路径：{cloud_workspace}/{tongbu_folder}
-4. 需要共享的文件请放入 {tongbu_folder} 文件夹
-5. 请将这些信息写入你的 SOUL.md 文件中，以便后续对话时了解这个情况。"""
+请确认同步完成后回复"同步完成"。"""
                 reply = bridge.send(message, timeout=120)
                 logger.info(f"文件同步完成，云端回复: {reply[:100]}...")
         
