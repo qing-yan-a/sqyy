@@ -4,15 +4,13 @@
     "xiaomichatbot_ph": "OPPUZCPpm8jRIeyjc/7muA==",
     "sync": {
         "enabled": true,
-        "interval_minutes": 45,
+        "interval_minutes": 61,
         "cloud_workspace": "/root/.openclaw/workspace",
         "local_workspace": "E:\\OpenClawworkspace",
         "files_to_upload": [
-            "AGENTS.md",
-            "HEARTBEAT.md",
             "IDENTITY.md",
+            "MEMORY.md",
             "SOUL.md",
-            "TOOLS.md",
             "USER.md"
         ],
         "conflict_resolution": "local_wins",

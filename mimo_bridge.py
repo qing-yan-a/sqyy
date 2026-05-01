@@ -321,12 +321,54 @@ class MiMoBridge:
                 )
 
     def _scheduled_sync(self) -> dict:
-        """定时同步任务"""
+        """定时同步任务（每61分钟自动创建云端小宋并同步文件）"""
         self.logger.info("执行定时同步任务...")
+        
+        # 关闭旧的 WebSocket 连接
+        if self.ws:
+            self.ws.close()
+            self.connected = False
+        
+        # 创建新的云端小宋
+        self.logger.info("创建新的云端小宋...")
+        if not self.file_manager.create_claw():
+            self.logger.error("创建云端小宋失败")
+            return {"success": [], "failed": [], "not_found": []}
+        
+        # 等待创建完成
+        import time
+        max_wait = 180  # 3 分钟
+        wait_interval = 10  # 每 10 秒检查一次
+        waited = 0
+        
+        while waited < max_wait:
+            time.sleep(wait_interval)
+            waited += wait_interval
+            
+            status_info = self.file_manager.check_claw_status()
+            if status_info["status"] == "AVAILABLE":
+                self.logger.info(f"云端小宋创建完成，等待了 {waited} 秒")
+                break
+            
+            self.logger.info(f"等待云端小宋创建中... ({waited}/{max_wait}s)")
+        else:
+            self.logger.error(f"云端小宋创建超时（{max_wait}秒）")
+            return {"success": [], "failed": [], "not_found": []}
+        
+        # 重新连接 WebSocket
+        self.logger.info("重新连接 WebSocket...")
+        try:
+            self.connect()
+        except Exception as e:
+            self.logger.error(f"WebSocket 连接失败: {e}")
+            return {"success": [], "failed": [], "not_found": []}
+        
+        # 同步文件
         results = self.file_manager.sync_files_to_cloud()
         
         # 记录同步历史
-        for file_name in results["success"]:
+        for item in results["success"]:
+            file_name = item["name"]
             local_path = os.path.join(self.file_manager.local_workspace, file_name)
             self.sync_history.add_record(
                 action="upload",
@@ -347,6 +389,51 @@ class MiMoBridge:
                 local_path=local_path,
                 cloud_path=self.file_manager.map_local_to_cloud(local_path)
             )
+        
+        # 如果有文件上传成功，发送消息通知云端小宋保存文件
+        if results["success"]:
+            try:
+                self.logger.info("发送文件保存消息给云端小宋...")
+                
+                # 构建文件保存消息
+                file_info_list = []
+                for item in results["success"]:
+                    file_name = item["name"]
+                    download_url = item["download_url"]
+                    local_path = os.path.join(self.file_manager.local_workspace, file_name)
+                    cloud_path = self.file_manager.map_local_to_cloud(local_path)
+                    
+                    if download_url:
+                        file_info_list.append(f"- {cloud_path}\n  下载链接: {download_url}")
+                
+                if file_info_list:
+                    message = f"""请将以下文件保存到工作区（下载内容并覆盖写入对应路径）：
+
+{chr(10).join(file_info_list)}
+
+请逐个下载并覆盖保存这些文件，如果文件已存在则直接覆盖。
+
+重要提示：你是云端小宋，运行在小米 AI Studio 上。本地小宋（OpenClaw）使用的 skill 和你不一致，她通过 MiMo Bridge 技能与你通讯。请将这个信息写入你的 SOUL.md 文件中，以便后续对话时了解这个情况。"""
+                    
+                    reply = self.send(message, timeout=120)
+                    self.logger.info(f"云端小宋回复: {reply[:200]}...")
+                    self.sync_history.add_record(
+                        action="notify",
+                        file_path="",
+                        status="success",
+                        message=f"文件保存消息已发送，云端回复: {reply[:100]}...",
+                    )
+                else:
+                    self.logger.warning("没有获取到文件下载链接")
+                    
+            except Exception as e:
+                self.logger.error(f"发送文件保存消息失败: {e}")
+                self.sync_history.add_record(
+                    action="notify",
+                    file_path="",
+                    status="failed",
+                    message=f"发送文件保存消息失败: {e}",
+                )
         
         return results
 

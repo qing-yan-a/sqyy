@@ -25,6 +25,95 @@ class FileManager:
         self.cloud_workspace = self.sync_config.get("cloud_workspace", "/root/.openclaw/workspace")
         self.local_workspace = self.sync_config.get("local_workspace", "E:\\OpenClawworkspace")
     
+    def check_claw_status(self) -> dict:
+        """检查云端小宋状态
+        
+        Returns:
+            dict: {"status": "AVAILABLE" or "DESTROYED", "expire_time": timestamp, "message": str}
+        """
+        ph_encoded = urllib.parse.quote(self.cookies["xiaomichatbot_ph"], safe="")
+        url = f"{self.BASE_URL}/open-apis/user/mimo-claw/status?xiaomichatbot_ph={ph_encoded}"
+        
+        try:
+            resp = requests.get(url, headers=self._headers(), timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("code") == 0:
+                status_data = data["data"]
+                return {
+                    "status": status_data.get("status"),
+                    "expire_time": status_data.get("expireTime"),
+                    "message": status_data.get("message")
+                }
+            else:
+                self.logger.error(f"检查状态失败: {data}")
+                return {"status": "UNKNOWN", "expire_time": None, "message": str(data)}
+        except Exception as e:
+            self.logger.error(f"检查状态异常: {e}")
+            return {"status": "ERROR", "expire_time": None, "message": str(e)}
+    
+    def create_claw(self) -> bool:
+        """创建云端小宋
+        
+        Returns:
+            bool: 是否创建成功
+        """
+        ph_encoded = urllib.parse.quote(self.cookies["xiaomichatbot_ph"], safe="")
+        url = f"{self.BASE_URL}/open-apis/user/mimo-claw/create?xiaomichatbot_ph={ph_encoded}"
+        
+        try:
+            resp = requests.post(url, headers=self._headers(), timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("code") == 0:
+                status = data["data"].get("status")
+                self.logger.info(f"创建云端小宋成功: {status}")
+                return True
+            else:
+                self.logger.error(f"创建云端小宋失败: {data}")
+                return False
+        except Exception as e:
+            self.logger.error(f"创建云端小宋异常: {e}")
+            return False
+    
+    def ensure_claw_available(self) -> bool:
+        """确保云端小宋可用
+        
+        Returns:
+            bool: 是否可用
+        """
+        status_info = self.check_claw_status()
+        
+        if status_info["status"] == "AVAILABLE":
+            self.logger.info(f"云端小宋可用，过期时间: {status_info['expire_time']}")
+            return True
+        
+        self.logger.info(f"云端小宋状态: {status_info['status']}，尝试创建...")
+        if not self.create_claw():
+            return False
+        
+        # 等待创建完成（最多 3 分钟）
+        import time
+        max_wait = 180  # 3 分钟
+        wait_interval = 10  # 每 10 秒检查一次
+        waited = 0
+        
+        while waited < max_wait:
+            time.sleep(wait_interval)
+            waited += wait_interval
+            
+            status_info = self.check_claw_status()
+            if status_info["status"] == "AVAILABLE":
+                self.logger.info(f"云端小宋创建完成，等待了 {waited} 秒")
+                return True
+            
+            self.logger.info(f"等待云端小宋创建中... ({waited}/{max_wait}s)")
+        
+        self.logger.error(f"云端小宋创建超时（{max_wait}秒）")
+        return False
+    
     def _cookie_str(self) -> str:
         """生成 Cookie 字符串"""
         return (
@@ -188,11 +277,15 @@ class FileManager:
             self.logger.error(f"上传到 FDS 失败: {e}")
             return False
     
-    def upload_file(self, local_path: str) -> bool:
-        """上传文件从本地到云端"""
+    def upload_file(self, local_path: str) -> dict:
+        """上传文件从本地到云端
+        
+        Returns:
+            dict: {"success": bool, "download_url": str or None}
+        """
         if not os.path.exists(local_path):
             self.logger.error(f"本地文件不存在: {local_path}")
-            return False
+            return {"success": False, "download_url": None}
         
         file_name = os.path.basename(local_path)
         self.logger.info(f"上传文件: {file_name}")
@@ -203,7 +296,7 @@ class FileManager:
                 file_content = f.read()
         except Exception as e:
             self.logger.error(f"读取文件失败: {e}")
-            return False
+            return {"success": False, "download_url": None}
         
         # 计算 MD5
         md5_hash = hashlib.md5(file_content).hexdigest()
@@ -211,15 +304,16 @@ class FileManager:
         # 获取上传凭证
         upload_info = self.get_upload_info(file_name, file_content)
         if not upload_info:
-            return False
+            return {"success": False, "download_url": None}
         
         # 上传到 FDS
         upload_url = upload_info.get("uploadUrl")
+        download_url = upload_info.get("resourceUrl")  # 获取下载链接
         if self.upload_to_fds(upload_url, file_content, md5_hash):
             self.logger.info(f"上传成功: {file_name} ({len(file_content)} bytes)")
-            return True
+            return {"success": True, "download_url": download_url}
         
-        return False
+        return {"success": False, "download_url": None}
     
     def delete_local_file(self, cloud_path: str) -> bool:
         """删除本地文件"""
@@ -241,7 +335,7 @@ class FileManager:
         """同步指定文件到云端"""
         files_to_upload = self.sync_config.get("files_to_upload", [])
         results = {
-            "success": [],
+            "success": [],  # [{"name": "AGENTS.md", "download_url": "https://..."}]
             "failed": [],
             "not_found": []
         }
@@ -254,8 +348,12 @@ class FileManager:
                 self.logger.warning(f"本地文件不存在: {file_name}")
                 continue
             
-            if self.upload_file(local_path):
-                results["success"].append(file_name)
+            upload_result = self.upload_file(local_path)
+            if upload_result["success"]:
+                results["success"].append({
+                    "name": file_name,
+                    "download_url": upload_result["download_url"]
+                })
             else:
                 results["failed"].append(file_name)
         

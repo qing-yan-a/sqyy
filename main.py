@@ -86,15 +86,46 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
+        # 确保云端小宋可用
+        logger.info("检查云端小宋状态...")
+        if not bridge.file_manager.ensure_claw_available():
+            logger.error("云端小宋不可用，无法启动")
+            sys.exit(1)
+        
         # 连接 WebSocket
         logger.info("正在连接到云端小宋...")
         bridge.connect()
         logger.info("连接成功！")
         
+        # 首次同步文件
+        logger.info("执行首次文件同步...")
+        results = bridge.file_manager.sync_files_to_cloud()
+        if results["success"]:
+            # 发送文件保存消息
+            file_info_list = []
+            for item in results["success"]:
+                file_name = item["name"]
+                download_url = item["download_url"]
+                local_path = os.path.join(bridge.file_manager.local_workspace, file_name)
+                cloud_path = bridge.file_manager.map_local_to_cloud(local_path)
+                if download_url:
+                    file_info_list.append(f"- {cloud_path}\n  下载链接: {download_url}")
+            
+            if file_info_list:
+                message = f"""请将以下文件保存到工作区（下载内容并覆盖写入对应路径）：
+
+{chr(10).join(file_info_list)}
+
+请逐个下载并覆盖保存这些文件，如果文件已存在则直接覆盖。
+
+重要提示：你是云端小宋，运行在小米 AI Studio 上。本地小宋（OpenClaw）使用的 skill 和你不一致，她通过 MiMo Bridge 技能与你通讯。请将这个信息写入你的 SOUL.md 文件中，以便后续对话时了解这个情况。"""
+                reply = bridge.send(message, timeout=120)
+                logger.info(f"文件同步完成，云端回复: {reply[:100]}...")
+        
         # 打印状态
         print_status(bridge)
         
-        # 启动同步服务
+        # 启动定时同步服务
         if config["sync"]["enabled"]:
             logger.info("启动定时同步服务...")
             bridge.start_sync()
