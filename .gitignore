@@ -3,6 +3,12 @@ test_*.py
 test_*.txt
 file_list_response.txt
 
+# 临时文件
+cloud_replies.txt
+reply.txt
+reply*.txt
+skill_test_reply.txt
+
 # 下载目录
 downloads/
 
