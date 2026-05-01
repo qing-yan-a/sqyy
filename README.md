@@ -5,8 +5,10 @@
 ## 功能特性
 
 - **WebSocket 通讯**：通过 WebSocket 直接连接小米 AI Studio，实现实时对话
-- **文件同步**：本地记忆文件自动同步到云端，支持双向同步
-- **定时任务**：支持定时自动同步，保持本地与云端数据一致
+- **智能文件同步**：
+  - 创建云端时上传核心文件（SOUL.md、IDENTITY.md、MEMORY.md、USER.md）
+  - 50分钟后自动回传记忆文件（MEMORY.md、USER.md）
+  - tongbu文件夹持续双向同步
 - **消息队列**：异步处理文件变更通知，提高响应效率
 - **日志管理**：完善的日志记录系统，便于问题排查
 
@@ -27,15 +29,20 @@ pip install websocket-client requests
     "xiaomichatbot_ph": "从浏览器 Cookie 复制",
     "sync": {
         "enabled": true,
-        "interval_minutes": 61,
         "cloud_workspace": "/root/.openclaw/workspace",
         "local_workspace": "E:\\OpenClawworkspace",
-        "files_to_upload": [
+        "create_upload_files": [
+            "SOUL.md",
             "IDENTITY.md",
             "MEMORY.md",
-            "SOUL.md",
             "USER.md"
         ],
+        "pullback_files": [
+            "MEMORY.md",
+            "USER.md"
+        ],
+        "pullback_delay_minutes": 50,
+        "tongbu_folder": "tongbu",
         "conflict_resolution": "local_wins",
         "delete_notification_threshold": 3
     },
@@ -57,6 +64,23 @@ pip install websocket-client requests
 
 **注意**：`serviceToken` 约 24 小时过期，过期后需重新获取。
 
+## 同步策略
+
+### 创建云端小宋时（上传）
+- SOUL.md → 云端（让云端有人格）
+- IDENTITY.md → 云端（让云端有身份）
+- MEMORY.md → 云端（共享记忆）
+- USER.md → 云端（用户信息）
+- tongbu/ → 云端（同步文件夹）
+
+### 50分钟后（回传）
+- MEMORY.md ← 云端（云端的详细工作记录）
+- USER.md ← 云端（可能有更新）
+
+### tongbu文件夹
+- 持续双向同步，有修改就触发
+- 用于项目文件、临时文档等需要共享的内容
+
 ## 使用方式
 
 ### 1. 启动主程序
@@ -68,8 +92,10 @@ python main.py
 启动后程序会：
 - 检查云端小宋状态
 - 建立 WebSocket 连接
-- 执行首次文件同步
-- 启动定时同步服务（如果已启用）
+- 让云端创建tongbu文件夹
+- 上传核心文件到云端
+- 启动50分钟定时回传任务
+- 启动tongbu文件夹持续同步
 
 ### 2. 简单对话示例
 
@@ -108,7 +134,6 @@ xiaosongchat/
 ├── main.py                 # 主程序入口
 ├── mimo_bridge.py          # 核心桥接模块
 ├── file_sync_manager.py    # 文件同步管理
-├── sync_scheduler.py       # 定时同步调度
 ├── sync_history.py         # 同步历史记录
 ├── logger.py               # 日志管理模块
 ├── mimo_bridge_config.json # 配置文件
@@ -150,7 +175,7 @@ xiaosongchat/
 
 1. **Cookie 过期**：`serviceToken` 约 24 小时过期，需手动刷新
 2. **会话生命周期**：云端会话 1 小时后销毁，但可随时新建
-3. **同步频率**：建议 50-61 分钟一次（匹配小米会话生命周期）
+3. **tongbu文件夹**：用于需要双向同步的文件，有修改就触发同步
 4. **文件大小**：消息过长可能触发截断，建议记忆文件控制在 15KB 以内
 5. **删除通知**：当云端删除文件数量达到阈值（默认 3 个）时，会通知用户确认
 

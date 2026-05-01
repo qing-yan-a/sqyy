@@ -4,15 +4,20 @@
     "xiaomichatbot_ph": "OPPUZCPpm8jRIeyjc/7muA==",
     "sync": {
         "enabled": true,
-        "interval_minutes": 61,
         "cloud_workspace": "/root/.openclaw/workspace",
         "local_workspace": "E:\\OpenClawworkspace",
-        "files_to_upload": [
+        "create_upload_files": [
+            "SOUL.md",
             "IDENTITY.md",
             "MEMORY.md",
-            "SOUL.md",
             "USER.md"
         ],
+        "pullback_files": [
+            "MEMORY.md",
+            "USER.md"
+        ],
+        "pullback_delay_minutes": 50,
+        "tongbu_folder": "tongbu",
         "conflict_resolution": "local_wins",
         "delete_notification_threshold": 3
     },

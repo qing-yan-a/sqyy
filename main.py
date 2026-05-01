@@ -47,11 +47,12 @@ def print_status(bridge: MiMoBridge):
     print("  MiMo Bridge 状态")
     print("=" * 60)
     print(f"  WebSocket 连接: {'已连接' if bridge.connected else '未连接'}")
-    print(f"  定时同步: {'已启用' if bridge.config['sync']['enabled'] else '已禁用'}")
-    print(f"  同步间隔: {bridge.config['sync']['interval_minutes']} 分钟")
     print(f"  本地工作区: {bridge.config['sync']['local_workspace']}")
     print(f"  云端工作区: {bridge.config['sync']['cloud_workspace']}")
-    print(f"  同步文件: {', '.join(bridge.config['sync']['files_to_upload'])}")
+    print(f"  创建时上传: {', '.join(bridge.config['sync']['create_upload_files'])}")
+    print(f"  回传文件: {', '.join(bridge.config['sync']['pullback_files'])}")
+    print(f"  回传延迟: {bridge.config['sync']['pullback_delay_minutes']} 分钟")
+    print(f"  同步文件夹: {bridge.config['sync']['tongbu_folder']}")
     
     # 显示上次同步时间
     last_sync = bridge.sync_history.get_last_sync_time()
@@ -78,7 +79,6 @@ def main():
     # 信号处理（优雅退出）
     def signal_handler(signum, frame):
         logger.info("收到退出信号，正在关闭...")
-        bridge.stop_sync()
         bridge.close()
         sys.exit(0)
     
@@ -97,7 +97,11 @@ def main():
         bridge.connect()
         logger.info("连接成功！")
         
-        # 首次同步文件
+        # 让云端创建tongbu文件夹
+        logger.info("让云端创建tongbu文件夹...")
+        bridge._create_tongbu_folder_on_cloud()
+        
+        # 上传核心文件（SOUL.md, IDENTITY.md, MEMORY.md, USER.md）
         logger.info("执行首次文件同步...")
         results = bridge.file_manager.sync_files_to_cloud()
         if results["success"]:
@@ -112,23 +116,35 @@ def main():
                     file_info_list.append(f"- {cloud_path}\n  下载链接: {download_url}")
             
             if file_info_list:
+                tongbu_folder = config["sync"].get("tongbu_folder", "tongbu")
+                cloud_workspace = config["sync"].get("cloud_workspace", "/root/.openclaw/workspace")
+                
                 message = f"""请将以下文件保存到工作区（下载内容并覆盖写入对应路径）：
 
 {chr(10).join(file_info_list)}
 
 请逐个下载并覆盖保存这些文件，如果文件已存在则直接覆盖。
 
-重要提示：你是云端小宋，运行在小米 AI Studio 上。本地小宋（OpenClaw）使用的 skill 和你不一致，她通过 MiMo Bridge 技能与你通讯。请将这个信息写入你的 SOUL.md 文件中，以便后续对话时了解这个情况。"""
+重要提示：
+1. 你是云端小宋，运行在小米 AI Studio 上
+2. 本地小宋（OpenClaw）使用的 skill 和你不一致，她通过 MiMo Bridge 技能与你通讯
+3. 你有一个 {tongbu_folder} 文件夹用于双向同步，路径：{cloud_workspace}/{tongbu_folder}
+4. 需要共享的文件请放入 {tongbu_folder} 文件夹
+5. 请将这些信息写入你的 SOUL.md 文件中，以便后续对话时了解这个情况。"""
                 reply = bridge.send(message, timeout=120)
                 logger.info(f"文件同步完成，云端回复: {reply[:100]}...")
         
         # 打印状态
         print_status(bridge)
         
-        # 启动定时同步服务
-        if config["sync"]["enabled"]:
-            logger.info("启动定时同步服务...")
-            bridge.start_sync()
+        # 启动50分钟定时回传任务
+        pullback_delay = config["sync"].get("pullback_delay_minutes", 50)
+        logger.info(f"启动{pullback_delay}分钟定时回传任务...")
+        bridge._schedule_pullback(pullback_delay)
+        
+        # 启动tongbu文件夹持续同步
+        logger.info("启动tongbu文件夹持续同步...")
+        bridge._start_tongbu_sync()
         
         # 保持运行
         logger.info("MiMo Bridge 已启动，按 Ctrl+C 退出")
@@ -142,7 +158,6 @@ def main():
     except Exception as e:
         logger.error(f"程序异常: {e}")
     finally:
-        bridge.stop_sync()
         bridge.close()
         logger.info("MiMo Bridge 已退出")
 

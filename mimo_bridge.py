@@ -19,7 +19,6 @@ from typing import Optional, Callable
 
 from logger import setup_logger, get_logger
 from file_sync_manager import FileManager
-from sync_scheduler import SyncScheduler
 from sync_history import SyncHistory
 
 try:
@@ -62,9 +61,6 @@ class MiMoBridge:
         # 初始化消息队列
         self._message_queue = queue.Queue()
         self._queue_worker = threading.Thread(target=self._queue_worker, daemon=True)
-        
-        # 初始化定时同步
-        self.sync_scheduler = SyncScheduler(config, self._scheduled_sync)
 
     def _cookie_str(self) -> str:
         return (
@@ -320,8 +316,29 @@ class MiMoBridge:
                     cloud_path=cloud_path
                 )
 
+    def _create_tongbu_folder_on_cloud(self) -> bool:
+        """让云端小宋创建tongbu文件夹"""
+        tongbu_folder = self.config["sync"].get("tongbu_folder", "tongbu")
+        cloud_workspace = self.config["sync"].get("cloud_workspace", "/root/.openclaw/workspace")
+        
+        message = f"""请在工作区创建一个名为 {tongbu_folder} 的文件夹。
+
+具体操作：
+1. 进入工作区目录：{cloud_workspace}
+2. 创建文件夹：{tongbu_folder}
+
+请确认创建完成后回复"已创建"。"""
+        
+        try:
+            reply = self.send(message, timeout=60)
+            self.logger.info(f"云端创建tongbu文件夹回复: {reply[:200]}...")
+            return True
+        except Exception as e:
+            self.logger.error(f"让云端创建tongbu文件夹失败: {e}")
+            return False
+    
     def _scheduled_sync(self) -> dict:
-        """定时同步任务（每61分钟自动创建云端小宋并同步文件）"""
+        """定时同步任务（每次新建云端小宋并同步文件）"""
         self.logger.info("执行定时同步任务...")
         
         # 关闭旧的 WebSocket 连接
@@ -336,7 +353,6 @@ class MiMoBridge:
             return {"success": [], "failed": [], "not_found": []}
         
         # 等待创建完成
-        import time
         max_wait = 180  # 3 分钟
         wait_interval = 10  # 每 10 秒检查一次
         waited = 0
@@ -363,7 +379,11 @@ class MiMoBridge:
             self.logger.error(f"WebSocket 连接失败: {e}")
             return {"success": [], "failed": [], "not_found": []}
         
-        # 同步文件
+        # 让云端创建tongbu文件夹
+        self.logger.info("让云端创建tongbu文件夹...")
+        self._create_tongbu_folder_on_cloud()
+        
+        # 上传核心文件（SOUL.md, IDENTITY.md, MEMORY.md, USER.md）
         results = self.file_manager.sync_files_to_cloud()
         
         # 记录同步历史
@@ -374,7 +394,7 @@ class MiMoBridge:
                 action="upload",
                 file_path=local_path,
                 status="success",
-                message="定时同步上传成功",
+                message="创建云端时上传成功",
                 local_path=local_path,
                 cloud_path=self.file_manager.map_local_to_cloud(local_path)
             )
@@ -385,7 +405,7 @@ class MiMoBridge:
                 action="upload",
                 file_path=local_path,
                 status="failed",
-                message="定时同步上传失败",
+                message="创建云端时上传失败",
                 local_path=local_path,
                 cloud_path=self.file_manager.map_local_to_cloud(local_path)
             )
@@ -407,13 +427,21 @@ class MiMoBridge:
                         file_info_list.append(f"- {cloud_path}\n  下载链接: {download_url}")
                 
                 if file_info_list:
+                    tongbu_folder = self.config["sync"].get("tongbu_folder", "tongbu")
+                    cloud_workspace = self.config["sync"].get("cloud_workspace", "/root/.openclaw/workspace")
+                    
                     message = f"""请将以下文件保存到工作区（下载内容并覆盖写入对应路径）：
 
 {chr(10).join(file_info_list)}
 
 请逐个下载并覆盖保存这些文件，如果文件已存在则直接覆盖。
 
-重要提示：你是云端小宋，运行在小米 AI Studio 上。本地小宋（OpenClaw）使用的 skill 和你不一致，她通过 MiMo Bridge 技能与你通讯。请将这个信息写入你的 SOUL.md 文件中，以便后续对话时了解这个情况。"""
+重要提示：
+1. 你是云端小宋，运行在小米 AI Studio 上
+2. 本地小宋（OpenClaw）使用的 skill 和你不一致，她通过 MiMo Bridge 技能与你通讯
+3. 你有一个 {tongbu_folder} 文件夹用于双向同步，路径：{cloud_workspace}/{tongbu_folder}
+4. 需要共享的文件请放入 {tongbu_folder} 文件夹
+5. 请将这些信息写入你的 SOUL.md 文件中，以便后续对话时了解这个情况。"""
                     
                     reply = self.send(message, timeout=120)
                     self.logger.info(f"云端小宋回复: {reply[:200]}...")
@@ -435,7 +463,129 @@ class MiMoBridge:
                     message=f"发送文件保存消息失败: {e}",
                 )
         
+        # 启动50分钟定时回传任务
+        pullback_delay = self.config["sync"].get("pullback_delay_minutes", 50)
+        self.logger.info(f"启动{pullback_delay}分钟定时回传任务...")
+        self._schedule_pullback(pullback_delay)
+        
+        # 启动tongbu文件夹持续同步
+        self.logger.info("启动tongbu文件夹持续同步...")
+        self._start_tongbu_sync()
+        
         return results
+    
+    def _schedule_pullback(self, delay_minutes: int):
+        """调度50分钟后的回传任务"""
+        def pullback_task():
+            self.logger.info(f"等待{delay_minutes}分钟后执行回传...")
+            time.sleep(delay_minutes * 60)
+            
+            self.logger.info("开始执行回传任务...")
+            try:
+                # 从云端拉取MEMORY.md和USER.md
+                results = self.file_manager.pullback_files_from_cloud()
+                
+                # 记录同步历史
+                for file_name in results["success"]:
+                    local_path = os.path.join(self.file_manager.local_workspace, file_name)
+                    self.sync_history.add_record(
+                        action="download",
+                        file_path=local_path,
+                        status="success",
+                        message="50分钟回传成功",
+                        local_path=local_path,
+                        cloud_path=self.file_manager.map_local_to_cloud(local_path)
+                    )
+                
+                for file_name in results["failed"]:
+                    local_path = os.path.join(self.file_manager.local_workspace, file_name)
+                    self.sync_history.add_record(
+                        action="download",
+                        file_path=local_path,
+                        status="failed",
+                        message="50分钟回传失败",
+                        local_path=local_path,
+                        cloud_path=self.file_manager.map_local_to_cloud(local_path)
+                    )
+                
+                self.logger.info(f"回传任务完成: 成功 {len(results['success'])}, 失败 {len(results['failed'])}")
+                
+            except Exception as e:
+                self.logger.error(f"回传任务异常: {e}")
+        
+        # 在后台线程中执行
+        pullback_thread = threading.Thread(target=pullback_task, daemon=True)
+        pullback_thread.start()
+    
+    def _start_tongbu_sync(self):
+        """启动tongbu文件夹持续同步"""
+        def tongbu_sync_task():
+            tongbu_folder = self.config["sync"].get("tongbu_folder", "tongbu")
+            local_tongbu = os.path.join(self.file_manager.local_workspace, tongbu_folder)
+            
+            # 确保本地tongbu文件夹存在
+            os.makedirs(local_tongbu, exist_ok=True)
+            
+            # 记录上次同步的文件状态
+            last_sync_state = {}
+            
+            while self.connected:
+                try:
+                    # 检查本地tongbu文件夹变化
+                    current_state = self._get_folder_state(local_tongbu)
+                    
+                    # 找出变化的文件
+                    changed_files = []
+                    for file_path, mtime in current_state.items():
+                        if file_path not in last_sync_state or last_sync_state[file_path] != mtime:
+                            changed_files.append(file_path)
+                    
+                    # 如果有变化，同步到云端
+                    if changed_files:
+                        self.logger.info(f"检测到{len(changed_files)}个文件变化，开始同步...")
+                        results = self.file_manager.sync_tongbu_folder(direction="upload")
+                        
+                        # 记录同步历史
+                        for item in results["upload"]["success"]:
+                            self.sync_history.add_record(
+                                action="upload",
+                                file_path=os.path.join(local_tongbu, item["name"]),
+                                status="success",
+                                message="tongbu文件夹同步成功",
+                                local_path=os.path.join(local_tongbu, item["name"]),
+                                cloud_path=f"{self.file_manager.cloud_workspace}/{tongbu_folder}/{item['name']}"
+                            )
+                        
+                        # 更新同步状态
+                        last_sync_state = current_state
+                    
+                    # 每30秒检查一次
+                    time.sleep(30)
+                    
+                except Exception as e:
+                    self.logger.error(f"tongbu同步异常: {e}")
+                    time.sleep(60)  # 出错后等待更长时间
+        
+        # 在后台线程中执行
+        tongbu_thread = threading.Thread(target=tongbu_sync_task, daemon=True)
+        tongbu_thread.start()
+    
+    def _get_folder_state(self, folder_path: str) -> dict:
+        """获取文件夹中所有文件的修改时间"""
+        state = {}
+        if not os.path.exists(folder_path):
+            return state
+        
+        for root, dirs, files in os.walk(folder_path):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    state[file_path] = mtime
+                except OSError:
+                    pass
+        
+        return state
 
     def send(self, message: str, timeout: float = 120) -> str:
         if not self.connected:
@@ -471,16 +621,6 @@ class MiMoBridge:
             parts.append(f"\n\n### {name}\n```\n{content}\n```")
         return self.send("\n".join(parts), timeout=timeout)
 
-    def start_sync(self):
-        """启动同步服务"""
-        self.logger.info("启动同步服务...")
-        self.sync_scheduler.start()
-
-    def stop_sync(self):
-        """停止同步服务"""
-        self.logger.info("停止同步服务...")
-        self.sync_scheduler.stop()
-
     def close(self):
         if self.ws:
             self.ws.close()
@@ -491,7 +631,6 @@ class MiMoBridge:
         return self
 
     def __exit__(self, *args):
-        self.stop_sync()
         self.close()
 
 

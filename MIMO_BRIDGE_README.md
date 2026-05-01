@@ -3,8 +3,25 @@
 ## 功能
 本地小宋通过 WebSocket 直接和云端小宋（小米 AI Studio）对话，实现：
 - 程序化发送消息、接收回复
-- 本地记忆文件同步到云端
+- 智能文件同步（创建时上传、50分钟后回传、tongbu文件夹持续同步）
 - 云端思考结果回传本地
+
+## 同步策略
+
+### 创建云端小宋时（上传）
+- SOUL.md → 云端（让云端有人格）
+- IDENTITY.md → 云端（让云端有身份）
+- MEMORY.md → 云端（共享记忆）
+- USER.md → 云端（用户信息）
+- tongbu/ → 云端（同步文件夹）
+
+### 50分钟后（回传）
+- MEMORY.md ← 云端（云端的详细工作记录）
+- USER.md ← 云端（可能有更新）
+
+### tongbu文件夹
+- 持续双向同步，有修改就触发
+- 用于项目文件、临时文档等需要共享的内容
 
 ## 安装依赖
 ```bash
@@ -16,8 +33,33 @@ pip install websocket-client requests
 ```json
 {
     "serviceToken": "从浏览器 Cookie 复制",
-    "userId": "2212029551",
-    "xiaomichatbot_ph": "从浏览器 Cookie 复制"
+    "userId": "你的用户ID",
+    "xiaomichatbot_ph": "从浏览器 Cookie 复制",
+    "sync": {
+        "enabled": true,
+        "cloud_workspace": "/root/.openclaw/workspace",
+        "local_workspace": "E:\\OpenClawworkspace",
+        "create_upload_files": [
+            "SOUL.md",
+            "IDENTITY.md",
+            "MEMORY.md",
+            "USER.md"
+        ],
+        "pullback_files": [
+            "MEMORY.md",
+            "USER.md"
+        ],
+        "pullback_delay_minutes": 50,
+        "tongbu_folder": "tongbu",
+        "conflict_resolution": "local_wins",
+        "delete_notification_threshold": 3
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "logs/mimo_bridge.log",
+        "max_size_mb": 10,
+        "backup_count": 5
+    }
 }
 ```
 
@@ -58,30 +100,18 @@ with MiMoBridge(cookies) as bridge:
     print(reply)
 ```
 
-### 3. 定时同步（本地小宋主循环）
-```python
-import time
-from mimo_bridge import MiMoBridge, SyncManager
-
-COOKIES = {...}  # 从配置文件读取
-
-while True:
-    try:
-        with MiMoBridge(COOKIES) as bridge:
-            sync = SyncManager(bridge, "E:\\OpenClawworkspace")
-            
-            # 同步到云端
-            cloud_reply = sync.sync_to_cloud()
-            
-            # 保存云端回复
-            sync.sync_from_cloud(cloud_reply)
-            
-            print("同步完成，等待 50 分钟...")
-    except Exception as e:
-        print(f"同步失败: {e}")
-    
-    time.sleep(50 * 60)  # 50 分钟
+### 3. 启动主程序
+```bash
+python main.py
 ```
+
+启动后程序会：
+- 检查云端小宋状态
+- 建立 WebSocket 连接
+- 让云端创建tongbu文件夹
+- 上传核心文件到云端
+- 启动50分钟定时回传任务
+- 启动tongbu文件夹持续同步
 
 ## 通讯协议说明
 
@@ -115,5 +145,5 @@ while True:
 ## 注意事项
 1. Cookie 过期需手动刷新（约 24 小时）
 2. 云端会话 1 小时后销毁，但可以随时新建
-3. 同步频率建议 50 分钟一次（匹配小米会话生命周期）
+3. tongbu文件夹用于需要双向同步的文件，有修改就触发同步
 4. 消息过长可能触发截断，建议记忆文件控制在 15KB 以内

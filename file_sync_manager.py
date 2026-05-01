@@ -332,10 +332,10 @@ class FileManager:
             return False
     
     def sync_files_to_cloud(self) -> dict:
-        """同步指定文件到云端"""
-        files_to_upload = self.sync_config.get("files_to_upload", [])
+        """同步指定文件到云端（创建云端时调用）"""
+        files_to_upload = self.sync_config.get("create_upload_files", [])
         results = {
-            "success": [],  # [{"name": "AGENTS.md", "download_url": "https://..."}]
+            "success": [],
             "failed": [],
             "not_found": []
         }
@@ -356,5 +356,90 @@ class FileManager:
                 })
             else:
                 results["failed"].append(file_name)
+        
+        return results
+    
+    def pullback_files_from_cloud(self) -> dict:
+        """从云端拉取文件（50分钟后调用）"""
+        files_to_pull = self.sync_config.get("pullback_files", [])
+        results = {
+            "success": [],
+            "failed": [],
+            "not_found": []
+        }
+        
+        # 获取云端文件列表
+        cloud_files = self.list_files()
+        cloud_file_names = {item.get("name", ""): item for item in cloud_files}
+        
+        for file_name in files_to_pull:
+            if file_name not in cloud_file_names:
+                results["not_found"].append(file_name)
+                self.logger.warning(f"云端文件不存在: {file_name}")
+                continue
+            
+            cloud_path = f"{self.cloud_workspace}/{file_name}"
+            if self.download_file(cloud_path):
+                results["success"].append(file_name)
+            else:
+                results["failed"].append(file_name)
+        
+        return results
+    
+    def get_tongbu_folder_path(self, is_cloud: bool = False) -> str:
+        """获取tongbu文件夹路径"""
+        folder_name = self.sync_config.get("tongbu_folder", "tongbu")
+        if is_cloud:
+            return f"{self.cloud_workspace}/{folder_name}"
+        else:
+            return os.path.join(self.local_workspace, folder_name)
+    
+    def sync_tongbu_folder(self, direction: str = "both") -> dict:
+        """同步tongbu文件夹
+        
+        Args:
+            direction: "upload" (本地→云端), "download" (云端→本地), "both" (双向)
+        """
+        tongbu_folder = self.sync_config.get("tongbu_folder", "tongbu")
+        local_tongbu = os.path.join(self.local_workspace, tongbu_folder)
+        cloud_tongbu = f"{self.cloud_workspace}/{tongbu_folder}"
+        
+        results = {
+            "upload": {"success": [], "failed": []},
+            "download": {"success": [], "failed": []}
+        }
+        
+        # 确保本地tongbu文件夹存在
+        os.makedirs(local_tongbu, exist_ok=True)
+        
+        if direction in ["upload", "both"]:
+            # 上传本地tongbu文件夹内容
+            for root, dirs, files in os.walk(local_tongbu):
+                for file_name in files:
+                    local_path = os.path.join(root, file_name)
+                    relative_path = os.path.relpath(local_path, local_tongbu)
+                    cloud_path = f"{cloud_tongbu}/{relative_path.replace(os.sep, '/')}"
+                    
+                    upload_result = self.upload_file(local_path)
+                    if upload_result["success"]:
+                        results["upload"]["success"].append({
+                            "name": relative_path,
+                            "download_url": upload_result["download_url"]
+                        })
+                    else:
+                        results["upload"]["failed"].append(relative_path)
+        
+        if direction in ["download", "both"]:
+            # 下载云端tongbu文件夹内容
+            cloud_files = self.list_files(cloud_tongbu)
+            for item in cloud_files:
+                file_name = item.get("name", "")
+                cloud_path = f"{cloud_tongbu}/{file_name}"
+                local_path = os.path.join(local_tongbu, file_name)
+                
+                if self.download_file(cloud_path):
+                    results["download"]["success"].append(file_name)
+                else:
+                    results["download"]["failed"].append(file_name)
         
         return results
