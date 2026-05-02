@@ -17,9 +17,11 @@
             "USER.md"
         ],
         "pullback_delay_minutes": 50,
+        "recreate_interval_minutes": 59,
         "tongbu_folder": "tongbu",
         "conflict_resolution": "local_wins",
-        "delete_notification_threshold": 3
+        "delete_notification_threshold": 3,
+        "session_hours": 24
     },
     "logging": {
         "level": "INFO",

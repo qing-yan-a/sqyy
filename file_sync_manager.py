@@ -443,3 +443,189 @@ class FileManager:
                     results["download"]["failed"].append(file_name)
         
         return results
+    
+    def get_recent_session_files(self, hours: int = 24) -> list:
+        """获取近N小时内的session文件
+        
+        Args:
+            hours: 时间范围（小时），默认24小时
+            
+        Returns:
+            list: 近期session文件路径列表
+        """
+        import time
+        from datetime import datetime, timedelta
+        from pathlib import Path
+        
+        # session文件目录
+        sessions_dir = Path(os.path.expanduser("~")) / ".openclaw" / "agents" / "main" / "sessions"
+        if not sessions_dir.exists():
+            self.logger.warning(f"session目录不存在: {sessions_dir}")
+            return []
+        
+        # 计算时间阈值
+        from datetime import timezone
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+        recent_files = []
+        
+        try:
+            for file_path in sessions_dir.glob("*.jsonl"):
+                # 跳过已删除和已重置的文件
+                if ".deleted." in file_path.name or ".reset." in file_path.name:
+                    continue
+                
+                # 检查文件内容中的时间戳
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        first_line = f.readline().strip()
+                        if first_line:
+                            data = json.loads(first_line)
+                            file_timestamp = data.get("timestamp", "")
+                            if file_timestamp:
+                                file_time = datetime.fromisoformat(file_timestamp.replace("Z", "+00:00"))
+                                if file_time >= cutoff_time:
+                                    recent_files.append(file_path)
+                except Exception:
+                    continue
+            
+            recent_files = sorted(recent_files, key=lambda f: f.stat().st_mtime)
+            self.logger.info(f"找到 {len(recent_files)} 个近{hours}小时的session文件")
+            return [str(f) for f in recent_files]
+            
+        except Exception as e:
+            self.logger.error(f"获取近期session文件失败: {e}")
+            return []
+    
+    def parse_session_file(self, file_path: str) -> list:
+        """解析session文件，提取消息"""
+        messages = []
+        
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    try:
+                        data = json.loads(line)
+                        
+                        # 只处理消息类型
+                        if data.get("type") != "message":
+                            continue
+                        
+                        message = data.get("message", {})
+                        role = message.get("role", "")
+                        timestamp = data.get("timestamp", "")
+                        content = message.get("content", [])
+                        
+                        # 提取文本内容
+                        text_parts = []
+                        for item in content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text_parts.append(item.get("text", ""))
+                            elif isinstance(item, str):
+                                text_parts.append(item)
+                        
+                        if text_parts:
+                            text = "\n".join(text_parts)
+                            # 截断过长的内容
+                            if len(text) > 200:
+                                text = text[:200] + "..."
+                            
+                            messages.append({
+                                "role": role,
+                                "text": text,
+                                "timestamp": timestamp
+                            })
+                    
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            self.logger.error(f"解析session文件失败: {e}")
+        
+        return messages
+    
+    def format_session_summary(self, messages: list) -> str:
+        """将消息整理成简短格式"""
+        from datetime import datetime, timedelta
+        
+        if not messages:
+            return "无对话记录"
+        
+        lines = []
+        current_date = None
+        
+        for msg in messages:
+            ts_str = msg.get("timestamp", "")
+            if ts_str:
+                try:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    local_ts = ts + timedelta(hours=8)
+                    time_str = local_ts.strftime("%H:%M")
+                    date_str = local_ts.strftime("%Y-%m-%d")
+                    
+                    if date_str != current_date:
+                        current_date = date_str
+                        lines.append(f"\n📜 {date_str} 的对话记录")
+                        lines.append("")
+                except:
+                    time_str = "??:??"
+            else:
+                time_str = "??:??"
+            
+            role = msg.get("role", "")
+            text = msg.get("text", "")
+            
+            if role == "user":
+                role_name = "卿颜"
+            elif role == "assistant":
+                role_name = "小宋"
+            else:
+                role_name = role
+            
+            if len(text) > 100:
+                text = text[:100] + "..."
+            
+            text = text.replace("\n", " ").strip()
+            lines.append(f"{time_str} — {role_name}：{text}")
+        
+        return "\n".join(lines)
+    
+    def generate_session_summary(self, hours: int = 24) -> str:
+        """生成session摘要文件
+        
+        Args:
+            hours: 时间范围（小时），默认24小时
+            
+        Returns:
+            str: 生成的session_summary.txt文件路径，如果没有session则返回空字符串
+        """
+        # 获取近期session文件
+        session_files = self.get_recent_session_files(hours)
+        
+        if not session_files:
+            self.logger.info("没有需要处理的session文件")
+            return ""
+        
+        # 解析所有session文件
+        all_messages = []
+        for file_path in session_files:
+            messages = self.parse_session_file(file_path)
+            all_messages.extend(messages)
+        
+        self.logger.info(f"共解析 {len(all_messages)} 条消息")
+        
+        # 整理成简短格式
+        summary = self.format_session_summary(all_messages)
+        
+        # 保存到文件
+        output_path = os.path.join(self.local_workspace, "session_summary.txt")
+        try:
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(summary)
+            self.logger.info(f"session摘要已保存到: {output_path}")
+            return output_path
+        except Exception as e:
+            self.logger.error(f"保存session摘要失败: {e}")
+            return ""
