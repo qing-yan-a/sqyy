@@ -757,20 +757,33 @@ public class HospitalPersistenceService {
 
     public Map<String, Object> search(String keyword) {
         String normalized = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
+        String[] tokens = normalized.isEmpty() ? new String[0] : normalized.split("\\s+");
+
         List<HospitalModels.Patient> matchedPatients = listPatients().stream()
-                .filter(patient -> contains(patient.name(), normalized)
-                        || contains(patient.patientNo(), normalized)
-                        || contains(patient.phone(), normalized))
+                .filter(patient -> matchesAllTokens(tokens,
+                        patient.name(), patient.patientNo(), patient.phone(),
+                        patient.idCard(), patient.allergyHistory(), patient.medicalHistory()))
                 .toList();
+
         List<HospitalModels.VisitDetail> matchedVisits = listVisits(null).stream()
-                .filter(visit -> contains(visit.visit().chiefComplaint(), normalized)
-                        || contains(visit.visit().department(), normalized)
-                        || contains(visit.visit().doctorName(), normalized))
+                .filter(visit -> {
+                    String diagnosisNames = visit.diagnoses().stream()
+                            .map(HospitalModels.DiagnosisRecord::diagnosisName)
+                            .collect(Collectors.joining(" "));
+                    String prescriptionNames = visit.prescriptions().stream()
+                            .map(HospitalModels.PrescriptionRecord::drugName)
+                            .collect(Collectors.joining(" "));
+                    return matchesAllTokens(tokens,
+                            visit.visit().chiefComplaint(), visit.visit().department(),
+                            visit.visit().doctorName(), visit.visit().notes(),
+                            diagnosisNames, prescriptionNames);
+                })
                 .toList();
+
         List<HospitalModels.Drug> matchedDrugs = listDrugs().stream()
-                .filter(drug -> contains(drug.drugName(), normalized)
-                        || contains(drug.drugCode(), normalized)
-                        || contains(drug.manufacturer(), normalized))
+                .filter(drug -> matchesAllTokens(tokens,
+                        drug.drugName(), drug.drugCode(), drug.manufacturer(),
+                        drug.specification(), drug.unit()))
                 .toList();
 
         return Map.of(
@@ -779,6 +792,77 @@ public class HospitalPersistenceService {
                 "visits", matchedVisits,
                 "drugs", matchedDrugs
         );
+    }
+
+    /**
+     * 模糊匹配：每个 token 都必须至少命中一个字段（子串包含 或 Levenshtein 编辑距离容错）
+     */
+    private boolean matchesAllTokens(String[] tokens, String... fields) {
+        for (String token : tokens) {
+            boolean tokenMatched = false;
+            for (String field : fields) {
+                if (fuzzyMatch(field, token)) {
+                    tokenMatched = true;
+                    break;
+                }
+            }
+            if (!tokenMatched) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 模糊匹配单个字段：优先子串包含，长度 >= 4 时增加 Levenshtein 编辑距离容错
+     */
+    private boolean fuzzyMatch(String source, String token) {
+        if (token == null || token.isBlank()) {
+            return true;
+        }
+        if (source == null) {
+            return false;
+        }
+        String lower = source.toLowerCase(Locale.ROOT);
+        // 子串包含（原有逻辑，保底）
+        if (lower.contains(token)) {
+            return true;
+        }
+        // 短关键词不做编辑距离匹配，避免误召回
+        if (token.length() < 4) {
+            return false;
+        }
+        // 按空格拆分字段内容，逐段做 Levenshtein 容错
+        int maxDistance = token.length() >= 8 ? 2 : 1;
+        for (String part : lower.split("\\s+")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            if (levenshtein(part, token) <= maxDistance) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Levenshtein 编辑距离
+     */
+    private int levenshtein(String a, String b) {
+        int[][] dp = new int[a.length() + 1][b.length() + 1];
+        for (int i = 0; i <= a.length(); i++) {
+            dp[i][0] = i;
+        }
+        for (int j = 0; j <= b.length(); j++) {
+            dp[0][j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                dp[i][j] = Math.min(Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1), dp[i - 1][j - 1] + cost);
+            }
+        }
+        return dp[a.length()][b.length()];
     }
 
     public Map<String, Object> buildTimeline(Long patientIdValue) {

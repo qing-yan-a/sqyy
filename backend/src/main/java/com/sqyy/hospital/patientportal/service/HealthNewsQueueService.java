@@ -17,7 +17,7 @@ public class HealthNewsQueueService {
 
     private static final Logger log = LoggerFactory.getLogger(HealthNewsQueueService.class);
     private static final int QUEUE_CAPACITY = 5;
-    private static final int FILL_DELAY_MS = 3000;        // 填充间隔 3 秒
+    private static final int FILL_DELAY_MS = 90000;        // 填充间隔 1.5min
     private static final int FULL_POLL_DELAY_MS = 600000;  // 队列满后轮询间隔 10 分钟
 
     private final CozeService cozeService;

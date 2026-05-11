@@ -36,7 +36,7 @@ app:
     expire-hours: 12
   # Coze AI 配置（PAT 仅存后端，绝不暴露前端）
   coze:
-    pat: ${COZE_PAT:pat_WAAybjNJNfE90LddVYZU1TJIHcBjZaLji334o01vkCKjLGHIbgl1n3hJxVhZWsaM}
+    pat: ${COZE_PAT:pat_70iS1yh25x2zVqptsWOhrAzI83kAAohIg2zzGD9xVrVF4HdDfzu4bnpBndTJPKSX}
     ai-bot-id: ${COZE_AI_BOT_ID:7621086295833559059}
     news-bot-id: ${COZE_NEWS_BOT_ID:7621119386388807689}
     api-base-url: ${COZE_API_BASE_URL:https://api.coze.cn}
