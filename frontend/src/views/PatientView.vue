@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { Edit, Search, User } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import FormDialog from '../components/FormDialog.vue'
 import { useAuthStore } from '../stores/auth'
@@ -18,6 +18,7 @@ interface Doctor {
 const authStore = useAuthStore()
 const canEdit = () => authStore.hasRole(['ADMIN', 'DOCTOR', 'RECEPTION'])
 const canRegister = () => authStore.hasRole(['RECEPTION'])
+const canDelete = () => authStore.hasRole(['ADMIN'])
 
 const patients = ref<Patient[]>([])
 const patientSearch = ref('')
@@ -203,6 +204,21 @@ async function submitEdit() {
   }
 }
 
+async function handleDelete(row: Patient) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除患者「${row.name}」（编号：${row.patientNo}）吗？删除后相关登录账号也将被移除。`,
+      '删除确认',
+      { type: 'warning' },
+    )
+    await api.deletePatient(row.id)
+    ElMessage.success('删除成功')
+    await loadPatients()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除失败')
+  }
+}
+
 function resetForm() {
   form.name = ''
   form.gender = '男'
@@ -222,7 +238,7 @@ onMounted(loadPatients)
     <template #header>
       <div class="card-header">
         <div class="header-left">
-          <span>{{ canRegister() ? '挂号服务' : '患者信息' }}</span>
+          <span>{{ canRegister() ? '挂号服务' : '患者管理' }}</span>
           <el-input v-model="patientSearch" :prefix-icon="Search" placeholder="搜索（姓名/病案号/手机/身份证）..." size="small" clearable style="width: 300px; margin-left: 16px;" @input="onSearch" @clear="onSearch" />
         </div>
         <el-button type="primary" @click="visible = true">新增患者</el-button>
@@ -257,10 +273,11 @@ onMounted(loadPatients)
       <el-table-column prop="phone" label="手机号" min-width="120" />
       <el-table-column prop="allergyHistory" label="过敏史" min-width="160" />
       <el-table-column prop="medicalHistory" label="既往病史" width="140" show-overflow-tooltip />
-      <el-table-column v-if="canRegister() || canEdit()" label="操作" width="120" fixed="right">
+      <el-table-column v-if="canRegister() || canEdit() || canDelete()" label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button v-if="canRegister()" type="primary" link @click="openRegister(row)">挂号</el-button>
           <el-button v-if="canEdit()" type="primary" link :icon="Edit" @click="openEdit(row)">编辑</el-button>
+          <el-button v-if="canDelete()" type="danger" link @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

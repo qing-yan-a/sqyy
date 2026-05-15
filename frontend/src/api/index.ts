@@ -25,6 +25,7 @@ export const api = {
     post<Patient>('/patients', payload),
   updatePatient: (patientId: number, payload: Record<string, unknown>) =>
     put<Patient>(`/patients/${patientId}`, payload),
+  deletePatient: (patientId: number) => remove<void>(`/patients/${patientId}`),
 
   getVisits: (patientId?: number) =>
     get<VisitDetail[]>('/visits', { params: patientId ? { patientId } : undefined }),

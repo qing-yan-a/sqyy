@@ -98,6 +98,12 @@ const routes = [
         meta: { title: '挂号服务', roles: ['ADMIN', 'DOCTOR', 'RECEPTION'] },
       },
       {
+        path: 'admin/users',
+        name: 'admin-users',
+        component: () => import('../views/UserAdminView.vue'),
+        meta: { title: '员工管理', roles: ['ADMIN'] },
+      },
+      {
         path: 'visits',
         name: 'visits',
         component: () => import('../views/VisitView.vue'),
@@ -119,19 +125,13 @@ const routes = [
         path: 'injection',
         name: 'injection',
         component: () => import('../views/InjectionView.vue'),
-        meta: { title: '注射药物', roles: ['ADMIN', 'PHARMACIST'] },
+        meta: { title: '注射药物', roles: ['PHARMACIST'] },
       },
       {
         path: 'dispense/:visitId',
         name: 'dispense',
         component: () => import('../views/DispenseView.vue'),
         meta: { title: '取药窗口', roles: ['ADMIN', 'PHARMACIST'], hideInMenu: true },
-      },
-      {
-        path: 'admin/users',
-        name: 'admin-users',
-        component: () => import('../views/UserAdminView.vue'),
-        meta: { title: '用户角色', roles: ['ADMIN'] },
       },
       {
         path: 'search',

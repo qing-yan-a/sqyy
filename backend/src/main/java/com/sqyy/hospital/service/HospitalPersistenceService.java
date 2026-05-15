@@ -333,6 +333,33 @@ public class HospitalPersistenceService {
         return toPatient(entity);
     }
 
+    @Transactional
+    public void deletePatient(Long patientId) {
+        PatientEntity patient = patientMapper.selectById(patientId);
+        if (patient == null) {
+            throw new BusinessException("患者不存在");
+        }
+        List<SysUserEntity> linkedUsers = sysUserMapper.selectList(
+                new LambdaQueryWrapper<SysUserEntity>().eq(SysUserEntity::getPatientId, patientId));
+        for (SysUserEntity user : linkedUsers) {
+            sysUserRoleMapper.delete(new LambdaQueryWrapper<SysUserRoleEntity>()
+                    .eq(SysUserRoleEntity::getUserId, user.getId()));
+            sysUserMapper.deleteById(user.getId());
+        }
+        List<VisitRecordEntity> visits = visitRecordMapper.selectList(
+                new LambdaQueryWrapper<VisitRecordEntity>().eq(VisitRecordEntity::getPatientId, patientId));
+        List<Long> visitIds = visits.stream().map(VisitRecordEntity::getId).toList();
+        if (!visitIds.isEmpty()) {
+            diagnosisRecordMapper.delete(new LambdaQueryWrapper<DiagnosisRecordEntity>()
+                    .in(DiagnosisRecordEntity::getVisitId, visitIds));
+            prescriptionRecordMapper.delete(new LambdaQueryWrapper<PrescriptionRecordEntity>()
+                    .in(PrescriptionRecordEntity::getVisitId, visitIds));
+            visitRecordMapper.delete(new LambdaQueryWrapper<VisitRecordEntity>()
+                    .eq(VisitRecordEntity::getPatientId, patientId));
+        }
+        patientMapper.deleteById(patientId);
+    }
+
     public List<HospitalModels.VisitDetail> listPendingVisitsByDoctor(String doctorName) {
         if (doctorName == null || doctorName.isBlank()) {
             return List.of();
@@ -1088,6 +1115,7 @@ public class HospitalPersistenceService {
                 ));
 
         return visitEntities.stream()
+                .filter(visit -> patientMap.containsKey(visit.getPatientId()))
                 .map(visit -> new HospitalModels.VisitDetail(
                         toVisitRecord(visit),
                         patientMap.get(visit.getPatientId()),

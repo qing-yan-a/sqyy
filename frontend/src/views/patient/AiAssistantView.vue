@@ -2,6 +2,7 @@
 import { ref, nextTick, onMounted } from 'vue'
 import { api } from '../../api'
 import { useAuthStore } from '../../stores/auth'
+import { renderAssistantMarkdown } from '../../utils/renderAssistantMarkdown'
 import { Position } from '@element-plus/icons-vue'
 
 interface ChatMessage {
@@ -15,6 +16,10 @@ const messages = ref<ChatMessage[]>([])
 const inputText = ref('')
 const loading = ref(false)
 const chatBody = ref<HTMLElement | null>(null)
+
+function assistantHtml(content: string) {
+  return renderAssistantMarkdown(content)
+}
 
 onMounted(() => {
   messages.value.push({
@@ -89,7 +94,12 @@ function scrollToBottom() {
           {{ msg.role === 'assistant' ? '🤖' : '😊' }}
         </div>
         <div class="message-bubble">
-          <div class="message-content">{{ msg.content }}</div>
+          <div
+            v-if="msg.role === 'assistant'"
+            class="message-content message-markdown"
+            v-html="assistantHtml(msg.content)"
+          />
+          <div v-else class="message-content">{{ msg.content }}</div>
           <div class="message-time">{{ msg.time }}</div>
         </div>
       </div>
@@ -196,6 +206,38 @@ function scrollToBottom() {
 
 .message-content {
   white-space: pre-wrap;
+}
+
+.message-markdown {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.message-markdown :deep(strong) {
+  font-weight: 600;
+}
+
+.message-markdown :deep(em) {
+  font-style: italic;
+}
+
+.message-markdown :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.9em;
+  padding: 0.12em 0.38em;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.07);
+}
+
+.message-markdown :deep(h4) {
+  margin: 8px 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.message-markdown :deep(li) {
+  margin: 2px 0 2px 16px;
+  list-style-type: disc;
 }
 
 .message-time {

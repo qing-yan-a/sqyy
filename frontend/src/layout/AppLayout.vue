@@ -32,7 +32,7 @@ const menuItems = computed<MenuItem[]>(() => {
     .map((item) => {
       let title = item.meta?.title ?? item.path
       if (item.path === 'patients') {
-        title = authStore.hasRole(['RECEPTION']) ? '挂号服务' : '患者信息'
+        title = authStore.hasRole(['RECEPTION']) ? '挂号服务' : '患者管理'
       }
       return {
         path: item.path ? `/${item.path}` : '/',
@@ -44,7 +44,7 @@ const menuItems = computed<MenuItem[]>(() => {
 
 const pageTitle = computed(() => {
   if (route.path === '/patients' || route.path.startsWith('/patients')) {
-    return authStore.hasRole(['RECEPTION']) ? '挂号服务' : '患者信息'
+    return authStore.hasRole(['RECEPTION']) ? '挂号服务' : '患者管理'
   }
   return (route.meta?.title as string) ?? '社区医院平台'
 })

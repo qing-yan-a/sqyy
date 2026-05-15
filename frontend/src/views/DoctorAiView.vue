@@ -716,6 +716,17 @@ async function confirmClearAll() {
   background: rgba(15, 23, 42, 0.07);
 }
 
+.studio-msg__markdown :deep(h4) {
+  margin: 8px 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.studio-msg__markdown :deep(li) {
+  margin: 2px 0 2px 16px;
+  list-style-type: disc;
+}
+
 
 .studio-msg__time {
   margin-top: 8px;

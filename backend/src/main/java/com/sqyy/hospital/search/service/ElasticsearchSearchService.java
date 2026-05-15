@@ -144,7 +144,7 @@ public class ElasticsearchSearchService implements SearchService, SearchSyncServ
                             visits.add(objectMapper.convertValue(vd, MAP_TYPE));
                         }
                         // 添加患者（去重）
-                        if (patients.stream().noneMatch(p -> p.get("id").equals(vd.patient().id()))) {
+                        if (vd.patient() != null && patients.stream().noneMatch(p -> p.get("id").equals(vd.patient().id()))) {
                             patients.add(objectMapper.convertValue(vd.patient(), MAP_TYPE));
                         }
                     }
@@ -318,7 +318,9 @@ public class ElasticsearchSearchService implements SearchService, SearchSyncServ
                 "visit-" + visitDetail.visit().id(),
                 "VISIT",
                 visitDetail.visit().id(),
-                visitDetail.patient().name() + " / " + visitDetail.visit().department(),
+                visitDetail.patient() != null
+                        ? visitDetail.patient().name() + " / " + visitDetail.visit().department()
+                        : visitDetail.visit().department(),
                 visitDetail.visit().chiefComplaint(),
                 String.join(" ", safe(visitDetail.visit().doctorName()), safe(visitDetail.visit().notes()),
                         String.join(" ", diagnosisNames), String.join(" ", prescriptionNames)),

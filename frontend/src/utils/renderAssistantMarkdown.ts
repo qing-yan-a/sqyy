@@ -1,6 +1,6 @@
 /**
  * 将助手返回的常见 Markdown 转为安全 HTML（先转义再替换，避免 XSS）。
- * 支持：行内代码 `、`**粗体**`、`*斜体*`、`_斜体_`、换行。
+ * 支持：### 标题、- 列表、行内代码 `、`**粗体**`、`*斜体*`、换行。
  */
 export function renderAssistantMarkdown(text: string): string {
   if (!text) return ''
@@ -13,6 +13,11 @@ export function renderAssistantMarkdown(text: string): string {
   // 斜体（不与 ** 冲突）
   s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
   s = s.replace(/(?<!_)_([^_]+)_(?!_)/g, '<em>$1</em>')
+  // ### 标题
+  s = s.replace(/^### (.+)$/gm, '<h4>$1</h4>')
+  // - 列表项
+  s = s.replace(/^- (.+)$/gm, '<li>$1</li>')
+  // 换行
   s = s.replace(/\n/g, '<br>')
   return s
 }

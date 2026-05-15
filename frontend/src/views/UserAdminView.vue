@@ -10,9 +10,7 @@ import type { AdminUser } from '../types'
 const loading = ref(false)
 const uploadingUserId = ref<number | null>(null)
 const employeeExpanded = ref(true)
-const patientExpanded = ref(true)
 const employeeSearch = ref('')
-const patientSearch = ref('')
 
 async function handleUserAvatarChange(userId: number, e: Event) {
   const target = e.target as HTMLInputElement
@@ -62,17 +60,6 @@ const employeeUsers = computed(() => {
     (u.department || '').toLowerCase().includes(kw) ||
     (u.pharmacy || '').toLowerCase().includes(kw) ||
     u.roles.some(r => r.toLowerCase().includes(kw))
-  )
-})
-
-const patientUsers = computed(() => {
-  const list = users.value.filter(u => u.roles.includes('PATIENT'))
-  if (!patientSearch.value.trim()) return list
-  const kw = patientSearch.value.trim().toLowerCase()
-  return list.filter(u =>
-    u.username.toLowerCase().includes(kw) ||
-    u.realName.toLowerCase().includes(kw) ||
-    (u.idCard || '').toLowerCase().includes(kw)
   )
 })
 
@@ -246,47 +233,6 @@ onMounted(async () => {
       </transition>
     </el-card>
 
-    <!-- 患者管理 -->
-    <el-card shadow="never" style="margin-top: 20px;">
-      <template #header>
-        <div class="card-header">
-          <div class="header-left" @click="patientExpanded = !patientExpanded">
-            <el-icon class="expand-icon"><component :is="patientExpanded ? ArrowDown : ArrowRight" /></el-icon>
-            <span>患者管理 ({{ patientUsers.length }})</span>
-          </div>
-          <div class="header-right">
-            <el-input v-model="patientSearch" :prefix-icon="Search" placeholder="搜索患者（用户名/姓名/身份证）..." size="small" clearable style="width: 280px;" />
-          </div>
-        </div>
-      </template>
-
-      <transition name="slide">
-        <el-table v-show="patientExpanded" :data="patientUsers" v-loading="loading" border>
-          <el-table-column label="头像" width="80">
-            <template #default="{ row }">
-              <el-avatar :size="36" :src="avatarUrl(row.avatar) || undefined">
-                <el-icon><User /></el-icon>
-              </el-avatar>
-            </template>
-          </el-table-column>
-          <el-table-column prop="username" label="用户名(病案号)" min-width="160" />
-          <el-table-column prop="realName" label="姓名" min-width="100" />
-          <el-table-column prop="idCard" label="身份证号" min-width="180" />
-          <el-table-column label="角色" min-width="100">
-            <template #default="{ row }">
-              <el-space wrap>
-                <el-tag v-for="role in row.roles" :key="role" :type="roleTagType(role) as any" size="small">{{ role }}</el-tag>
-              </el-space>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="80" fixed="right">
-            <template #default="{ row }">
-              <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </transition>
-    </el-card>
   </div>
 
   <!-- 新增员工弹窗 -->
